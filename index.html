@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="theme-color" content="#11151c">
+<meta name="mobile-web-app-capable" content="yes">
+<title>SPIKE Remote</title>
+<style>
+/* VOICE: a game controller, direct and tactile
+   IDEA: handheld RC transmitter
+   PICTURE: the joystick itself
+   COLOUR/TYPE: graphite body, LEGO yellow accent; system sans
+   LAYOUT: status strip, joystick, speed + buttons, hub code below */
+:root{--bg:#11151c;--panel:#1b212b;--ink:#eef1f5;--dim:#8a95a5;--acc:#ffcf00;--ok:#3ddc84;--bad:#ff5a5a}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Roboto,sans-serif;overflow-x:clip;user-select:none}
+main{max-width:520px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--bad);margin-right:6px}
+.dot.on{background:var(--ok)}
+#status{color:var(--dim);font-size:14px}
+button{font:inherit;font-weight:600;min-height:48px;border:0;border-radius:12px;padding:0 16px;background:var(--panel);color:var(--ink);cursor:pointer}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button.main{background:var(--acc);color:#111}
+button:disabled{opacity:.4}
+.row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
+#pad{position:relative;width:min(80vw,320px);aspect-ratio:1;margin:12px auto;border-radius:50%;
+ background:radial-gradient(circle at 50% 40%,#28303c,#151a22 70%);box-shadow:inset 0 0 0 2px #2c3542,0 10px 30px #0008;touch-action:none}
+#pad::before,#pad::after{content:"";position:absolute;background:#2c3542}
+#pad::before{left:50%;top:10%;bottom:10%;width:2px;margin-left:-1px}
+#pad::after{top:50%;left:10%;right:10%;height:2px;margin-top:-1px}
+#knob{position:absolute;left:50%;top:50%;width:34%;aspect-ratio:1;margin:-17% 0 0 -17%;border-radius:50%;
+ background:radial-gradient(circle at 40% 35%,#ffe066,var(--acc) 55%,#c9a000);box-shadow:0 6px 16px #000a;z-index:1}
+.readout{display:flex;justify-content:space-between;color:var(--dim);font-size:14px;font-variant-numeric:tabular-nums}
+label{display:block;margin-top:8px;font-size:14px;color:var(--dim)}
+input[type=range]{width:100%;height:44px;accent-color:var(--acc)}
+details{margin-top:18px;background:var(--panel);border-radius:12px;padding:12px 14px}
+summary{font-weight:600;cursor:pointer;min-height:28px}
+pre{overflow-x:auto;background:#0b0e13;padding:12px;border-radius:8px;font-size:13px;user-select:text}
+ol{padding-left:20px;margin:8px 0}
+h2{font-size:17px;margin:18px 0 4px}
+.ports{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ports label{margin:0}
+select{display:block;width:100%;min-height:48px;margin-top:4px;font:inherit;font-size:16px;background:var(--panel);color:var(--ink);border:1px solid #2c3542;border-radius:10px;padding:0 10px}
+.arm{display:grid;grid-template-columns:64px minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center;margin:8px 0}
+.arm span{color:var(--dim);font-size:14px}
+.hold{min-height:60px;font-size:18px;touch-action:none}
+.hold.on{background:var(--acc);color:#111}
+.err{color:var(--bad);font-size:14px;min-height:20px}
+</style>
+</head>
+<body>
+<main>
+ <div class="top">
+  <h1>SPIKE Remote</h1>
+  <span id="status"><span class="dot" id="dot"></span><span id="stxt">Not connected</span></span>
+ </div>
+ <button class="main" id="connect" style="width:100%">Connect hub</button>
+ <div class="row">
+  <button id="start" disabled>▶ Start</button>
+  <button id="stopP" disabled>■ Stop</button>
+  <button id="brake" disabled>Brake</button>
+ </div>
+ <div id="pad"><div id="knob"></div></div>
+ <div class="readout"><span>Left <b id="lv">0</b></span><span>Right <b id="rv">0</b></span></div>
+ <label for="spd">Max speed: <b id="spdv">70</b>%</label>
+ <input type="range" id="spd" min="20" max="100" value="70">
+ <label><input type="checkbox" id="swap"> Swap left/right motors</label>
+
+ <h2>Arms</h2>
+ <div class="arm"><span id="lC">Arm 1</span><button class="hold" data-arm="0" data-dir="1">▲ Up</button><button class="hold" data-arm="0" data-dir="-1">▼ Down</button></div>
+ <div class="arm" id="armD" hidden><span id="lD">Arm 2</span><button class="hold" data-arm="1" data-dir="1">▲ Up</button><button class="hold" data-arm="1" data-dir="-1">▼ Down</button></div>
+ <label for="aspd">Arm speed: <b id="aspdv">50</b>%</label>
+ <input type="range" id="aspd" min="10" max="100" value="50">
+ <label><input type="checkbox" id="two"> Use a second arm</label>
+
+ <h2>Ports</h2>
+ <div class="ports">
+  <label>Left wheel<select id="pL"></select></label>
+  <label>Right wheel<select id="pR"></select></label>
+  <label>Arm 1<select id="pC"></select></label>
+  <label id="pDw" hidden>Arm 2<select id="pD"></select></label>
+ </div>
+ <div class="err" id="perr"></div>
+ <label><input type="checkbox" id="flipA"> Flip arm direction</label>
+ <div class="err" id="err"></div>
+
+ <details open>
+  <summary>Hub code (put on the hub once)</summary>
+  <ol>
+   <li>Open code.pybricks.com, connect the hub and paste this code.</li>
+   <li>Press Run once, then disconnect. The code stays saved on the hub.</li>
+   <li>Come back here, tap <b>Connect hub</b>, then <b>▶ Start</b>.</li>
+  </ol>
+  <p style="font-size:14px;color:var(--dim)">If you change a port or the second-arm option, copy the new code and run it on the hub again. The code below updates automatically.</p>
+  <pre id="code"></pre>
+  <button id="copy">Copy code</button>
+ </details>
+</main>
+<script>
+{
+const SVC='c5f50001-8280-46da-89f4-6d8051e4aeef', CMD='c5f50002-8280-46da-89f4-6d8051e4aeef';
+const $=id=>document.getElementById(id);
+let dev=null, ch=null, busy=false, pending=null, last='', jx=0, jy=0;
+
+const setErr=t=>$('err').textContent=t||'';
+const setConn=(on,txt)=>{$('dot').classList.toggle('on',on);$('stxt').textContent=txt;
+ ['start','stopP','brake'].forEach(b=>$(b).disabled=!on);$('connect').textContent=on?'Disconnect':'Connect hub';};
+
+async function write(bytes){
+ if(!ch) return;
+ if(busy){pending=bytes;return;}
+ busy=true;
+ try{ await ch.writeValueWithResponse(bytes); }catch(e){ setErr('Send failed: '+e.message); }
+ busy=false;
+ if(pending){const p=pending;pending=null;write(p);}
+}
+const enc=v=>String(Math.round(v)+100).padStart(3,'0');
+const arms=[0,0];
+const PORTS='ABCDEF', DEF={pL:'A',pR:'B',pC:'C',pD:'D'};
+const load=k=>{try{return localStorage.getItem('spike-'+k)}catch(_){return null}};
+const save=(k,v)=>{try{localStorage.setItem('spike-'+k,v)}catch(_){}};
+for(const id in DEF){
+ const s=$(id); s.innerHTML=[...PORTS].map(p=>`<option>${p}</option>`).join('');
+ s.value=load(id)||DEF[id];
+ s.onchange=()=>{save(id,s.value);renderCode();};
+}
+if(load('two')==='1'){$('two').checked=true;$('armD').hidden=false;}
+function renderCode(){
+ const two=$('two').checked, P=id=>$(id).value;
+ $('pDw').hidden=!two;
+ $('lC').textContent='Arm 1 ('+P('pC')+')'; $('lD').textContent='Arm 2 ('+P('pD')+')';
+ const used=['pL','pR','pC'].concat(two?['pD']:[]).map(P);
+ $('perr').textContent=new Set(used).size<used.length?'Two motors are set to the same port. Pick different ports.':'';
+ $('code').textContent=`from pybricks.pupdevices import Motor
+from pybricks.parameters import Port, Direction
+from usys import stdin
+left = Motor(Port.${P('pL')}, Direction.COUNTERCLOCKWISE)
+right = Motor(Port.${P('pR')})
+armC = Motor(Port.${P('pC')})
+`+(two?`armD = Motor(Port.${P('pD')})\n`:'')+
+  'while True: p = stdin.read('+(two?12:9)+'); left.dc(int(p[0:3]) - 100); right.dc(int(p[3:6]) - 100); c = int(p[6:9]) - 100; armC.run(c * 8) if c else armC.hold()'+
+  (two?'; d = int(p[9:12]) - 100; armD.run(d * 8) if d else armD.hold()':'');
+}
+function sendDrive(l,r){
+ const s=+$('aspd').value*($('flipA').checked?-1:1);
+ let msg=enc(l)+enc(r)+enc(arms[0]*s);
+ if($('two').checked) msg+=enc(arms[1]*s);
+ if(msg===last) return; last=msg;
+ const b=new Uint8Array(msg.length+1); b[0]=0x06; for(let i=0;i<msg.length;i++) b[i+1]=msg.charCodeAt(i);
+ write(b);
+}
+document.querySelectorAll('.hold').forEach(btn=>{
+ const a=+btn.dataset.arm, d=+btn.dataset.dir;
+ const on=e=>{e.preventDefault();btn.setPointerCapture?.(e.pointerId);btn.classList.add('on');arms[a]=d;update();};
+ const off=()=>{if(!btn.classList.contains('on'))return;btn.classList.remove('on');if(arms[a]===d)arms[a]=0;update();};
+ btn.addEventListener('pointerdown',on);
+ btn.addEventListener('pointerup',off);btn.addEventListener('pointercancel',off);btn.addEventListener('lostpointercapture',off);
+ btn.addEventListener('contextmenu',e=>e.preventDefault());
+});
+$('aspd').oninput=()=>{$('aspdv').textContent=$('aspd').value;update();};
+$('flipA').onchange=update;
+$('two').onchange=()=>{save('two',$('two').checked?'1':'0');$('armD').hidden=!$('two').checked;arms[1]=0;renderCode();last='';update();};
+renderCode();
+function update(){
+ const max=+$('spd').value;
+ let l=(jy+jx), r=(jy-jx);
+ const m=Math.max(1,Math.abs(l),Math.abs(r)); l=l/m*max; r=r/m*max;
+ if($('swap').checked) [l,r]=[r,l];
+ $('lv').textContent=Math.round(l); $('rv').textContent=Math.round(r);
+ sendDrive(l,r);
+}
+
+$('connect').onclick=async()=>{
+ setErr('');
+ if(dev&&dev.gatt.connected){dev.gatt.disconnect();return;}
+ if(!navigator.bluetooth){setErr('Bluetooth not available. Open this page in Chrome on Android (not inside another app).');return;}
+ try{
+  dev=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
+  dev.addEventListener('gattserverdisconnected',()=>{ch=null;setConn(false,'Not connected');});
+  setConn(false,'Connecting…');
+  const srv=await dev.gatt.connect();
+  const s=await srv.getPrimaryService(SVC);
+  ch=await s.getCharacteristic(CMD);
+  try{
+   await ch.startNotifications();
+   ch.addEventListener('characteristicvaluechanged',e=>{
+    const d=e.target.value; if(d.getUint8(0)!==0) return;
+    const run=(d.getUint32(1,true)>>6)&1;
+    $('stxt').textContent=(dev.name||'Hub')+(run?' · program running':' · ready');
+   });
+  }catch(_){}
+  last=''; setConn(true,(dev.name||'Hub')+' · connected');
+ }catch(e){ if(e.name!=='NotFoundError') setErr(e.message); setConn(false,'Not connected'); }
+};
+$('start').onclick=()=>{last='';write(new Uint8Array([0x01]));};
+$('stopP').onclick=()=>write(new Uint8Array([0x00]));
+$('brake').onclick=()=>{jx=jy=0;place(0,0);last='';update();};
+$('spd').oninput=()=>{$('spdv').textContent=$('spd').value;update();};
+$('swap').onchange=update;
+$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('code').textContent);$('copy').textContent='Copied ✓';}catch(_){$('copy').textContent='Long-press the code to copy';}};
+
+const pad=$('pad'), knob=$('knob');
+function place(x,y){knob.style.transform=`translate(${x*pad.clientWidth*0.33}px,${-y*pad.clientWidth*0.33}px)`;}
+function move(e){
+ const r=pad.getBoundingClientRect(), R=r.width*0.33;
+ let x=(e.clientX-r.left-r.width/2)/R, y=-(e.clientY-r.top-r.height/2)/R;
+ const d=Math.hypot(x,y); if(d>1){x/=d;y/=d;}
+ if(Math.abs(x)<0.08)x=0; if(Math.abs(y)<0.08)y=0;
+ jx=x; jy=y; place(x,y); update();
+}
+pad.addEventListener('pointerdown',e=>{pad.setPointerCapture(e.pointerId);move(e);});
+pad.addEventListener('pointermove',e=>{if(pad.hasPointerCapture(e.pointerId))move(e);});
+const release=()=>{jx=jy=0;arms[0]=arms[1]=0;document.querySelectorAll('.hold.on').forEach(b=>b.classList.remove('on'));place(0,0);update();};
+pad.addEventListener('pointerup',release);
+pad.addEventListener('pointercancel',release);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
+}
+</script>
+</body>
